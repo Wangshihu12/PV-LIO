@@ -1,0 +1,24 @@
+<launch>
+	<!-- Launch file for Livox AVIA LiDAR -->
+
+	<arg name="rviz" default="true" />
+
+	<rosparam command="load" file="$(find pv_lio)/config/hilti2023.yaml" />
+
+	<param name="feature_extract_enable" type="bool" value="0" />
+	<!-- 100HZ的bag  point_filter_num建议设置为1;   10HZ的bag建议设置为2或3 -->
+    <param name="point_filter_num" type="int" value="1" />
+    <param name="max_iteration" type="int" value="15" />
+    <param name="max_fine_iteration" type="int" value="1" />
+	<param name="filter_size_surf" type="double" value="0.5" />
+	<param name="filter_size_map" type="double" value="0.5" />
+	<param name="cube_side_length" type="double" value="1000" />
+	<node pkg="pv_lio" type="pv_lio_node" name="pv_lio_node"
+		output="screen" />
+
+	<group if="$(arg rviz)">
+		<node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
+			args="-d $(find pv_lio)/config/rviz_cfg/voxel_mapping.rviz" />
+	</group>
+
+</launch>
