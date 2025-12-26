@@ -23,6 +23,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <geometry_msgs/Vector3.h>
 #include "use-ikfom.hpp"
+#include "common_lib.h"
 
 /// *************Preconfiguration
 
@@ -199,7 +200,42 @@ void ImuProcess::IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 
   init_state.bg  = mean_gyr;
   init_state.offset_T_L_I = Lidar_T_wrt_IMU;
   init_state.offset_R_L_I = Lidar_R_wrt_IMU;
-  kf_state.change_x(init_state);
+  // kf_state.change_x(init_state);
+
+  // 根据第一帧激光的最后的一个imu 的重力加速度计算 roll pitch 并用来简单的水平矫正
+  {
+
+    sensor_msgs::Imu::ConstPtr last_imu_ = meas.imu.back();
+
+    double ax = last_imu_->linear_acceleration.x;
+    double ay = last_imu_->linear_acceleration.y;
+    double az = last_imu_->linear_acceleration.z; // Subtract gravity to get the tilt
+
+    // Calculate roll and pitch angles
+    double roll = atan2(ay, az);
+    double pitch = atan2(-ax, sqrt(ay * ay + az * az));
+
+    // Yaw cannot be determined from accelerometer data alone
+    double yaw = 0.0; // Assuming yaw is 0
+
+    // 根据 roll, pitch 水平矫正 初始化旋转矩阵
+    Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd yawAngle(0, Eigen::Vector3d::UnitZ()); // 假设yaw为0
+
+    // Convert angles to degrees
+    roll = roll * 180.0 / PI_M;
+    pitch = pitch * 180.0 / PI_M;
+    yaw = yaw * 180.0 / PI_M;
+
+    // Print the calculated angles
+    ROS_INFO("Roll: %f, Pitch: %f, Yaw: %f", roll, pitch, yaw);
+
+    Eigen::Quaternion<double> q = yawAngle * pitchAngle * rollAngle;
+    init_state.rot = MTK::SO3<double>(q.matrix());
+    init_state.grav = init_state.rot * init_state.grav;
+  }
+  kf_state.change_x(init_state); // 将初始化后的状态传入esekfom.hpp中的x_
 
   // initial world pose
   Initial_R_wrt_G = SO3(g2R(mean_acc));

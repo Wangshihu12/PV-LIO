@@ -53,7 +53,7 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Vector3.h>
-#include <livox_ros_driver/CustomMsg.h>
+#include <livox_ros_driver2/CustomMsg.h>
 #include "preprocess.h"
 #include "voxel_map_util.hpp"
 
@@ -74,6 +74,8 @@ double lidar_time_offset = 0.0;
 float res_last[100000] = {0.0};
 float DET_RANGE = 300.0f;
 const float MOV_THRESHOLD = 1.5f;
+
+bool mid360;
 
 mutex mtx_buffer;
 condition_variable sig_buffer;
@@ -140,6 +142,8 @@ std::vector<double> layer_point_size;
 
 bool publish_voxel_map = false;
 int publish_max_voxel_layer = 0;
+
+bool is_mid360;
 
 std::unordered_map<VOXEL_LOC, OctoTree *> voxel_map;
 
@@ -252,7 +256,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
 double timediff_lidar_wrt_imu = 0.0;
 bool   timediff_set_flg = false;
-void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg)
+void livox_pcl_cbk(const livox_ros_driver2::CustomMsg::ConstPtr &msg)
 {
     mtx_buffer.lock();
     double preprocess_start_time = omp_get_wtime();
@@ -299,6 +303,15 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
     }
 
     double timestamp = msg->header.stamp.toSec();
+
+    if (mid360)
+    {
+        msg->angular_velocity.x = msg_in->angular_velocity.y;
+        msg->angular_velocity.y = msg_in->angular_velocity.x;
+        msg->linear_acceleration.x = msg_in->linear_acceleration.y;
+        msg->linear_acceleration.y = msg_in->linear_acceleration.x;
+    }
+    
 
     if (timestamp < last_timestamp_imu)
     {
@@ -817,6 +830,7 @@ int main(int argc, char** argv)
     nh.param<bool>("common/time_sync_en", time_sync_en, false);
 
     // mapping algorithm params
+    nh.param<bool>("mapping/mid360",mid360,false);
     nh.param<float>("mapping/det_range",DET_RANGE,300.f);
     nh.param<int>("mapping/max_iteration", NUM_MAX_ITERATIONS, 4);
     nh.param<int>("mapping/max_points_size", max_points_size, 100);
@@ -838,6 +852,9 @@ int main(int argc, char** argv)
     nh.param<double>("noise_model/acc_cov",acc_cov,0.1);
     nh.param<double>("noise_model/b_gyr_cov",b_gyr_cov,0.0001);
     nh.param<double>("noise_model/b_acc_cov",b_acc_cov,0.0001);
+
+    // 是否是mid360
+    nh.param<bool>("mapping/is_mid360",is_mid360,false);
 
     // visualization params
     nh.param<bool>("publish/pub_voxel_map", publish_voxel_map, false);
